@@ -1,0 +1,5 @@
+config.yml
+input/
+output/
+__pycache__/
+epub/
