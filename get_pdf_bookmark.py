@@ -220,39 +220,64 @@ def get_bookmark_children(bookmark):
         debug_print(f"获取子书签出错: {e}")
     return []  # 如果没有子书签或出错，返回空列表
 
-def flatten_bookmarks(bookmarks, pdf_reader, level=0):
-    """扁平化处理书签，返回所有书签的列表，每个书签包含层级信息"""
-    # 检查书签结构
-    if DEBUG:
-        debug_print(f"正在处理书签，层级: {level}, 类型: {type(bookmarks)}")
-        debug_print(dump_object(bookmarks))
-    
+def flatten_bookmarks_recursive(bookmarks, pdf_reader, level=0):
+    """递归处理PyPDF2的书签结构"""
     result = []
     
-    # 如果是列表，处理每个元素
-    if isinstance(bookmarks, list):
-        for bookmark in bookmarks:
-            result.extend(flatten_bookmarks(bookmark, pdf_reader, level))
+    if not bookmarks:
         return result
     
-    # 处理单个书签
-    title = get_bookmark_title(bookmarks)
-    page = get_bookmark_page(bookmarks, pdf_reader)
+    i = 0
+    while i < len(bookmarks):
+        bookmark = bookmarks[i]
+        
+        if DEBUG:
+            debug_print(f"处理书签 {i}，层级 {level}，类型: {type(bookmark)}")
+        
+        # 如果是列表，这是一个有子书签的结构
+        if isinstance(bookmark, list):
+            result.extend(flatten_bookmarks_recursive(bookmark, pdf_reader, level))
+        else:
+            # 单个书签对象
+            title = get_bookmark_title(bookmark)
+            page = get_bookmark_page(bookmark, pdf_reader)
+            
+            # 添加当前书签
+            result.append({
+                'title': title,
+                'page': page,
+                'level': level
+            })
+            
+            if DEBUG:
+                debug_print(f"添加书签: {title} (层级: {level})")
+            
+            # 检查下一个元素是否是子书签列表
+            # PyPDF2中，如果当前书签有子书签，子书签会紧跟在当前书签后面作为一个列表
+            if i + 1 < len(bookmarks) and isinstance(bookmarks[i + 1], list):
+                child_bookmarks = bookmarks[i + 1]
+                if DEBUG:
+                    debug_print(f"书签 '{title}' 有 {len(child_bookmarks)} 个子书签")
+                result.extend(flatten_bookmarks_recursive(child_bookmarks, pdf_reader, level + 1))
+                i += 1  # 跳过子书签列表
+        
+        i += 1
     
-    # 添加当前书签
-    result.append({
-        'title': title,
-        'page': page,
-        'level': level
-    })
+    return result
+
+def flatten_bookmarks(bookmarks, pdf_reader, level=0):
+    """扁平化处理书签，返回所有书签的列表，每个书签包含层级信息"""
+    if DEBUG:
+        debug_print(f"开始处理书签结构，类型: {type(bookmarks)}")
+        debug_print(dump_object(bookmarks, max_depth=2))
     
-    # 处理子书签，层级加1
-    children = get_bookmark_children(bookmarks)
-    if children:
-        debug_print(f"书签 '{title}' 有 {len(children)} 个子书签")
+    # 使用新的递归处理函数
+    result = flatten_bookmarks_recursive(bookmarks, pdf_reader, level)
     
-    for child in children:
-        result.extend(flatten_bookmarks(child, pdf_reader, level + 1))
+    if DEBUG:
+        debug_print(f"处理完成，共 {len(result)} 个书签")
+        for i, bm in enumerate(result[:5]):
+            debug_print(f"书签 {i}: {bm}")
     
     return result
 
